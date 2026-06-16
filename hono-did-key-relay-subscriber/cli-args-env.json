@@ -1,0 +1,52 @@
+{
+  "name": "hono-did-key-relay-subscriber",
+  "description": "XRPC relay subscriber client",
+  "options": [
+    {
+      "name": "save-keypair",
+      "type": "flag",
+      "description": "Persist generated keypair to disk"
+    },
+    {
+      "name": "load-keypair",
+      "type": "flag",
+      "description": "Load existing keypair from disk instead of generating"
+    },
+    {
+      "name": "keypair-path",
+      "type": "string",
+      "description": "Path to keypair file (default ./keypair.json)"
+    },
+    {
+      "name": "dispatcher-host",
+      "type": "string",
+      "description": "Relay dispatcher hostname",
+      "env": "DISPATCHER_HOST",
+      "default": "xrpc.fedproxy.com"
+    },
+    {
+      "name": "atproto-pds",
+      "type": "string",
+      "description": "AT Protocol PDS URL",
+      "env": "ATPROTO_PDS",
+      "default": "https://bsky.social"
+    },
+    {
+      "name": "atproto-handle",
+      "type": "string",
+      "description": "AT Protocol handle for login",
+      "env": "ATPROTO_HANDLE"
+    },
+    {
+      "name": "atproto-password",
+      "type": "string",
+      "description": "AT Protocol password for login",
+      "env": "ATPROTO_PASSWORD"
+    },
+    {
+      "name": "write-proxy-ref-http-to-path",
+      "type": "string",
+      "description": "Write proxy ref HTTPS URL to file"
+    }
+  ]
+}

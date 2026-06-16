@@ -1,0 +1,19 @@
+{
+  "nodeModulesDir": "auto",
+  "workspace": [
+    "./lib/common/did-key-relay",
+    "./lib/common/cli-args-env",
+    "./lib/abc/did-key-relay-relayer",
+    "./lib/abc/did-key-relay-subscriber",
+    "./lib/did-key-relay-relayer-xrpc",
+    "./lib/did-key-relay-subscriber-xrpc",
+    "./lib/hono-factory-did-key-relay-relayer-xrpc",
+    "./lib/hono-factory-did-key-relay-subscriber-xrpc",
+    "./hono-did-key-relay-relayer",
+    "./hono-did-key-relay-subscriber"
+  ],
+  "allowScripts": ["npm:@parcel/watcher@2.5.6", "npm:core-js@3.49.0", "npm:node-pty@1.1.0"],
+  "imports": {
+    "@std/assert": "jsr:@std/assert@^1.0.19"
+  }
+}
