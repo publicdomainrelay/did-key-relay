@@ -1,4 +1,7 @@
 import type { NonceStore, VerifyResult } from "@publicdomainrelay/did-key-relay-relayer-abc";
+import { decodeJwtPayload } from "@publicdomainrelay/did-key-relay-common";
+export { verifyServiceAuth, verifyServiceAuthExt } from "@publicdomainrelay/did-key-relay-common";
+export type { VerifyServiceAuthOptions, VerifyServiceAuthResult } from "@publicdomainrelay/did-key-relay-common";
 
 interface NonceEntry {
   key: string;
@@ -64,96 +67,4 @@ export function createNonceStore(ttlMs: number): NonceStore {
       return { ok: true, key: reg.key };
     },
   };
-}
-
-function decodeJwtPayload(token: string): Record<string, unknown> {
-  const payloadB64 = token.split(".")[1];
-  if (!payloadB64) throw new Error("malformed JWT");
-  const json = atob(payloadB64.replace(/-/g, "+").replace(/_/g, "/"));
-  return JSON.parse(json);
-}
-
-export function verifyServiceAuth(
-  authHeader: string | null | undefined,
-  audDid: string,
-  lxm: string,
-  _serviceAuth?: string,
-): void {
-  if (!authHeader) {
-    throw new Error("missing Authorization header");
-  }
-  const parts = authHeader.split(" ");
-  if (parts.length !== 2 || parts[0].toLowerCase() !== "bearer") {
-    throw new Error("Authorization header must be Bearer <token>");
-  }
-  const token = parts[1];
-  let payload: Record<string, unknown>;
-  try {
-    payload = decodeJwtPayload(token);
-  } catch {
-    throw new Error("failed to decode service auth JWT");
-  }
-  if (payload.aud !== audDid) {
-    throw new Error(
-      `aud mismatch: expected ${audDid}, got ${payload.aud}`,
-    );
-  }
-  if (payload.lxm !== lxm) {
-    throw new Error(`lxm mismatch: expected ${lxm}, got ${payload.lxm}`);
-  }
-  if (typeof payload.exp === "number" && payload.exp * 1000 < Date.now()) {
-    throw new Error("service auth token expired");
-  }
-}
-
-export interface VerifyServiceAuthOptions {
-  authHeader: string | null | undefined;
-  hostname: string;
-  lxm: string;
-  serviceIds?: string[];
-  idResolver?: unknown;
-}
-
-export interface VerifyServiceAuthResult {
-  issuerDid: string;
-}
-
-export async function verifyServiceAuthExt(
-  opts: VerifyServiceAuthOptions,
-): Promise<VerifyServiceAuthResult> {
-  if (!opts.authHeader) {
-    throw new Error("missing Authorization header");
-  }
-  const parts = opts.authHeader.split(" ");
-  if (parts.length !== 2 || parts[0].toLowerCase() !== "bearer") {
-    throw new Error("Authorization header must be Bearer <token>");
-  }
-  const token = parts[1];
-
-  let payload: Record<string, unknown>;
-  try {
-    payload = decodeJwtPayload(token);
-  } catch {
-    throw new Error("failed to decode service auth JWT");
-  }
-
-  const audDid = `did:web:${opts.hostname}`;
-  if (payload.aud !== audDid) {
-    throw new Error(`aud mismatch: expected ${audDid}, got ${payload.aud}`);
-  }
-
-  if (payload.lxm !== opts.lxm) {
-    throw new Error(`lxm mismatch: expected ${opts.lxm}, got ${payload.lxm}`);
-  }
-
-  if (typeof payload.exp === "number" && payload.exp * 1000 < Date.now()) {
-    throw new Error("service auth token expired");
-  }
-
-  const issuerDid = payload.iss as string;
-  if (!issuerDid?.startsWith("did:")) {
-    throw new Error("invalid issuer DID in service auth token");
-  }
-
-  return { issuerDid };
 }

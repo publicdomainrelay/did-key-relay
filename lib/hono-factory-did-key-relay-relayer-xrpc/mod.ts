@@ -1,8 +1,9 @@
 import { upgradeWebSocket } from "@hono/hono/deno";
 import { cors } from "@hono/hono/cors";
 import { createFactory } from "@hono/hono/factory";
+import { createStructuredLogger } from "@publicdomainrelay/logger";
+const log = createStructuredLogger("relay");
 import {
-  log,
   hostnameOnly,
   hostnameToDid,
   didToSubdomain,
@@ -54,7 +55,7 @@ export function createRelayFactory(opts: RelayFactoryOptions) {
       app.use("*", async (c, next) => {
         const method = c.req.method;
         const path = new URL(c.req.url).pathname;
-        log("info", { component: "relay", event: "request", method, path });
+        log.info("request", { component: "relay", method, path });
         await next();
         const status = c.res.status;
         if (status >= 400) {
@@ -63,7 +64,7 @@ export function createRelayFactory(opts: RelayFactoryOptions) {
             const text = await c.res.clone().text();
             try { responseBody = JSON.parse(text); } catch { responseBody = text; }
           } catch { responseBody = null; }
-          log("error", { component: "relay", event: "response_error", method, path, status, responseBody });
+          log.error("response_error", { component: "relay", method, path, status, responseBody });
         }
       });
 
@@ -72,7 +73,7 @@ export function createRelayFactory(opts: RelayFactoryOptions) {
         try {
           await verifyServiceAuth(c.req.header("Authorization"), hostnameToDid(hostname), GET_NONCE_NSID);
         } catch (err) {
-          log("warn", { component: "relay", event: "auth_denied", nsid: GET_NONCE_NSID, error: String(err) });
+          log.warn("auth_denied", { component: "relay", nsid: GET_NONCE_NSID, error: String(err) });
           return c.json({ error: "AuthenticationRequired", message: String(err) }, 401);
         }
         let input: { key?: string };
@@ -81,7 +82,7 @@ export function createRelayFactory(opts: RelayFactoryOptions) {
           return c.json({ error: "InvalidRequest", message: "key must be a did:key" }, 400);
         }
         const nonce = nonceStore.issue(input.key);
-        log("info", { component: "relay", event: "nonce_issued", key: input.key });
+        log.info("nonce_issued", { component: "relay", key: input.key });
         return c.json({ nonce, signatures: [] });
       });
 
@@ -95,29 +96,29 @@ export function createRelayFactory(opts: RelayFactoryOptions) {
           async onOpen(_evt, ws) {
             const raw = ws.raw as WebSocket;
             if (!clientDid.startsWith("did:key:")) {
-              log("warn", { component: "relay", event: "missing_did" });
+              log.warn("missing_did", { component: "relay" });
               raw.close(1008, "did query param must be a did:key");
               return;
             }
             let reg: { key?: string; nonce?: string; signatures?: Array<{ key?: string; signature?: string }> };
             try { reg = JSON.parse(registrationParam); } catch {
-              log("warn", { component: "relay", event: "registration_malformed", did: clientDid });
+              log.warn("registration_malformed", { component: "relay", did: clientDid });
               raw.close(1008, "malformed registration");
               return;
             }
             const result = await nonceStore.verify(reg);
             if (!result.ok) {
-              log("warn", { component: "relay", event: "registration_rejected", did: clientDid, reason: result.reason });
+              log.warn("registration_rejected", { component: "relay", did: clientDid, reason: result.reason });
               raw.close(1008, `registration rejected: ${result.reason}`);
               return;
             }
             if (result.key !== clientDid) {
-              log("warn", { component: "relay", event: "did_mismatch", did: clientDid, registrationKey: result.key });
+              log.warn("did_mismatch", { component: "relay", did: clientDid, registrationKey: result.key });
               raw.close(1008, "did does not match registration key");
               return;
             }
             state.subscribers.set(subdomain, raw);
-            log("info", { component: "relay", event: "subscriber_connected", subdomain, key: result.key });
+            log.info("subscriber_connected", { component: "relay", subdomain, key: result.key });
             state.flushReconnectQueue(subdomain, raw);
             raw.send(JSON.stringify({
               $type: `${SUBSCRIBE_NSID}#registered`,
@@ -166,7 +167,7 @@ export function createRelayFactory(opts: RelayFactoryOptions) {
             state.subscribers.delete(subdomain);
             state.drainToReconnectQueue(subdomain);
             state.rejectSubscriberSubscriptions(subdomain);
-            log("info", { component: "relay", event: "subscriber_disconnected", subdomain });
+            log.info("subscriber_disconnected", { component: "relay", subdomain });
           },
 
           onError() {
@@ -183,7 +184,7 @@ export function createRelayFactory(opts: RelayFactoryOptions) {
           const serviceAuth = c.req.query("service_auth");
           await verifyServiceAuth(c.req.header("Authorization"), hostnameToDid(hostname), SUBSCRIBE_NSID, serviceAuth);
         } catch (err) {
-          log("warn", { component: "relay", event: "auth_denied", nsid: SUBSCRIBE_NSID, error: String(err) });
+          log.warn("auth_denied", { component: "relay", nsid: SUBSCRIBE_NSID, error: String(err) });
           return c.json({ error: "AuthenticationRequired", message: String(err) }, 401);
         }
         return wsSubscribeHandler(c, next);
@@ -276,7 +277,7 @@ export function createRelayFactory(opts: RelayFactoryOptions) {
           if (msg.includes("no active subscriber")) {
             return c.json({ error: "NotFound", message: msg }, 404);
           }
-          log("error", { component: "relay", event: "relay_failed", path, subdomain, error: msg });
+          log.error("relay_failed", { component: "relay", path, subdomain, error: msg });
           return c.json({ error: "RelayError", message: msg }, 502);
         }
 

@@ -2,7 +2,6 @@
   "version": "0.0.0",
   "license": "Unlicense",
   "imports": {
-    "@publicdomainrelay/cli-args-env": "jsr:@publicdomainrelay/cli-args-env@^0",
     "@publicdomainrelay/did-key-relay-common": "jsr:@publicdomainrelay/did-key-relay-common@^0",
     "@publicdomainrelay/hono-factory-did-key-relay-relayer-xrpc": "jsr:@publicdomainrelay/hono-factory-did-key-relay-relayer-xrpc@^0"
   },

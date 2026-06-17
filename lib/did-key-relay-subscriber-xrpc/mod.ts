@@ -1,5 +1,5 @@
+import { createStructuredLogger } from "@publicdomainrelay/logger";
 import {
-  log,
   hostnameOnly,
   didToSubdomain,
   SUBSCRIBE_NSID,
@@ -13,6 +13,7 @@ import type {
   CallerHandle,
 } from "@publicdomainrelay/did-key-relay-subscriber-abc";
 import type { RelayRequest } from "@publicdomainrelay/did-key-relay-common";
+const log = createStructuredLogger("subscriber");
 
 export interface RelayRequestResult {
   status: number;
@@ -74,7 +75,7 @@ export async function createSubscriber(
       30_000,
     );
     ws.onopen = () => {
-      log("info", { component: label, event: "ws_open", host: opts.dispatcherHost });
+      log.info("ws_open", { component: label, host: opts.dispatcherHost });
     };
     ws.onmessage = (evt) => {
       let msg: Record<string, unknown>;
@@ -168,12 +169,12 @@ export async function createSubscriber(
       }
     };
     ws.onerror = (evt) => {
-      log("error", { component: label, event: "ws_error", error: String(evt) });
+      log.error("ws_error", { component: label, error: String(evt) });
       clearTimeout(timeout);
       reject(new Error("WebSocket error during registration"));
     };
     ws.onclose = (evt) => {
-      log("info", { component: label, event: "ws_close", code: evt.code, reason: evt.reason });
+      log.info("ws_close", { component: label, code: evt.code, reason: evt.reason });
     };
   });
 
@@ -205,7 +206,7 @@ export function createCaller(opts: CallerOptions): CallerHandle {
   function connect(): WebSocket {
     const ws = new WebSocket(url);
     ws.onopen = () => {
-      log("info", { component: label, event: "ws_open", url: url.toString() });
+      log.info("ws_open", { component: label, url: url.toString() });
     };
     ws.onmessage = (evt) => {
       let msg: unknown;
@@ -218,10 +219,10 @@ export function createCaller(opts: CallerOptions): CallerHandle {
       opts.onEvent?.(summary, eventIndex++);
     };
     ws.onerror = () => {
-      log("error", { component: label, event: "ws_error" });
+      log.error("ws_error", { component: label });
     };
     ws.onclose = (evt) => {
-      log("info", { component: label, event: "ws_close", code: evt.code, reason: evt.reason });
+      log.info("ws_close", { component: label, code: evt.code, reason: evt.reason });
       if (!closed) {
         setTimeout(() => {
           if (!closed) connect();
