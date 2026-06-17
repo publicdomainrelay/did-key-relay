@@ -7,7 +7,10 @@
     "jsr:@cliffy/table@1.2.1": "1.2.1",
     "jsr:@hono/hono@*": "4.12.24",
     "jsr:@std/fmt@^1.0.10": "1.0.10",
-    "jsr:@std/text@^1.0.19": "1.0.19"
+    "jsr:@std/text@^1.0.19": "1.0.19",
+    "npm:@atproto/api@*": "0.20.14",
+    "npm:@atproto/crypto@*": "0.5.0",
+    "npm:@atproto/identity@*": "0.5.0"
   },
   "jsr": {
     "@cliffy/command@1.2.1": {
@@ -46,6 +49,121 @@
       "integrity": "003a0e032d360e8c3a4e0410fb792c77a66bd6553fee9d60c6ec1bce30d29223"
     }
   },
+  "npm": {
+    "@atproto/api@0.20.14": {
+      "integrity": "sha512-Lv5YcYZpdlkee7qwILTYI1kfHKhKTCf4UUOqahp3FIgxPnLEOxYlRNPahY6cnCz+ZGUctUcpOcXUvSV5OAOztQ==",
+      "dependencies": [
+        "@atproto/common-web",
+        "@atproto/lexicon",
+        "@atproto/syntax",
+        "@atproto/xrpc",
+        "await-lock",
+        "multiformats",
+        "tlds",
+        "zod"
+      ]
+    },
+    "@atproto/common-web@0.5.0": {
+      "integrity": "sha512-ReWnkuZdDU/74/I47gaI26uxQjHmpq4edp41NnZZQ5vIIKGb7Ei6pZHzDTUD9JURo109SKrPx9RMP2IQm0fOKA==",
+      "dependencies": [
+        "@atproto/lex-data",
+        "@atproto/lex-json",
+        "@atproto/syntax",
+        "zod"
+      ]
+    },
+    "@atproto/crypto@0.5.0": {
+      "integrity": "sha512-HBfq6z+tzkiBzPhHOvRFkQU3inTQIUJAkb1UEyGx+pdPTnFFtnfIoo9Kr1ZV/FzMIgnHOA8H2UJC3dxxFl1eVg==",
+      "dependencies": [
+        "@noble/curves",
+        "@noble/hashes",
+        "uint8arrays"
+      ]
+    },
+    "@atproto/identity@0.5.0": {
+      "integrity": "sha512-9KjpOVhwIMh1CDC3ErcxOof9mfYz+dZrUFRdp1jcaY8xZo4CkQgGBDKG2/6dP1FP4iqfG6r52JGhnTdcCzwBwQ==",
+      "dependencies": [
+        "@atproto/common-web",
+        "@atproto/crypto"
+      ]
+    },
+    "@atproto/lex-data@0.1.1": {
+      "integrity": "sha512-/xza8nU/YhtzhETnHL3QKKofaJ28/0NCzhT7LaYoUkm8EgypWp5ykEtmW52yLhQM2JF6fVa25g1soQmNTGqtSg==",
+      "dependencies": [
+        "multiformats",
+        "tslib",
+        "uint8arrays",
+        "unicode-segmenter"
+      ]
+    },
+    "@atproto/lex-json@0.1.0": {
+      "integrity": "sha512-oWUrRMwFyWpmi/5k1Se3xBTbP06XdxBS5iFuUz9LmqItaPXwrWRD87a9ldPvINQ/A2/mn7J6/qug8sDVlhD+vQ==",
+      "dependencies": [
+        "@atproto/lex-data",
+        "tslib"
+      ]
+    },
+    "@atproto/lexicon@0.7.1": {
+      "integrity": "sha512-voNfNED5KUxn3vpo7N5DMRblBDfWf7kSfdKhJFC1RrLCxg38YbBzzURNVQJ32bp13Oot8kYfyXBWxTgtKLvw8w==",
+      "dependencies": [
+        "@atproto/common-web",
+        "@atproto/syntax",
+        "multiformats",
+        "zod"
+      ]
+    },
+    "@atproto/syntax@0.6.1": {
+      "integrity": "sha512-kA4dQDoMPpWCH8N0Q4KoSq024u5MkVfDVa8DdhyLjGA72z/khbOf1jXKPv7NIL2oEc9aj7geKELdvqyf4ogopA==",
+      "dependencies": [
+        "iso-datestring-validator",
+        "tslib"
+      ]
+    },
+    "@atproto/xrpc@0.8.0": {
+      "integrity": "sha512-NJy02bIKrWlE2NQkRV1kT0Cj0ixbuxlF/MejBdo4cPWAa9v3oZexvAcjjb0zaOYeABkaU14iyIhvn2G4e/oLpw==",
+      "dependencies": [
+        "@atproto/lexicon",
+        "zod"
+      ]
+    },
+    "@noble/curves@1.9.7": {
+      "integrity": "sha512-gbKGcRUYIjA3/zCCNaWDciTMFI0dCkvou3TL8Zmy5Nc7sJ47a0jtOeZoTaMxkuqRo9cRhjOdZJXegxYE5FN/xw==",
+      "dependencies": [
+        "@noble/hashes"
+      ]
+    },
+    "@noble/hashes@1.8.0": {
+      "integrity": "sha512-jCs9ldd7NwzpgXDIf6P3+NrHh9/sD6CQdxHyjQI+h/6rDNo88ypBxxz45UDuZHz9r3tNz7N/VInSVoVdtXEI4A=="
+    },
+    "await-lock@3.0.0": {
+      "integrity": "sha512-eO6fLiSnrJrMdjWMNK8zbVRXPs2TKJg78iKZd9wDpN3na5tcoV6EoeiOlMgk2QaAQ1gIrK1YuMsJHXWqz89tSA=="
+    },
+    "iso-datestring-validator@2.2.2": {
+      "integrity": "sha512-yLEMkBbLZTlVQqOnQ4FiMujR6T4DEcCb1xizmvXS+OxuhwcbtynoosRzdMA69zZCShCNAbi+gJ71FxZBBXx1SA=="
+    },
+    "multiformats@13.4.2": {
+      "integrity": "sha512-eh6eHCrRi1+POZ3dA+Dq1C6jhP1GNtr9CRINMb67OKzqW9I5DUuZM/3jLPlzhgpGeiNUlEGEbkCYChXMCc/8DQ=="
+    },
+    "tlds@1.261.0": {
+      "integrity": "sha512-QXqwfEl9ddlGBaRFXIvNKK6OhipSiLXuRuLJX5DErz0o0Q0rYxulWLdFryTkV5PkdZct5iMInwYEGe/eR++1AA==",
+      "bin": true
+    },
+    "tslib@2.8.1": {
+      "integrity": "sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w=="
+    },
+    "uint8arrays@5.1.1": {
+      "integrity": "sha512-9muQwa4wZG4dKi9gMAIBtnk2Pw87SRpvWTH6lOGm19V2Uqxr4uomUf2PGqPnWc+qs06sN8owUU4jfcoWOcfwVQ==",
+      "dependencies": [
+        "multiformats"
+      ]
+    },
+    "unicode-segmenter@0.14.5": {
+      "integrity": "sha512-jHGmj2LUuqDcX3hqY12Ql+uhUTn8huuxNZGq7GvtF6bSybzH3aFgedYu/KTzQStEgt1Ra2F3HxadNXsNjb3m3g=="
+    },
+    "zod@3.25.76": {
+      "integrity": "sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ=="
+    }
+  },
   "workspace": {
     "dependencies": [
       "jsr:@std/assert@^1.0.19"
@@ -53,7 +171,6 @@
     "members": {
       "hono-did-key-relay-relayer": {
         "dependencies": [
-          "jsr:@publicdomainrelay/did-key-relay-common@0",
           "jsr:@publicdomainrelay/hono-factory-did-key-relay-relayer-xrpc@0"
         ]
       },
@@ -84,7 +201,8 @@
       "lib/did-key-relay-subscriber-xrpc": {
         "dependencies": [
           "jsr:@publicdomainrelay/did-key-relay-common@0",
-          "jsr:@publicdomainrelay/did-key-relay-subscriber-abc@0"
+          "jsr:@publicdomainrelay/did-key-relay-subscriber-abc@0",
+          "jsr:@publicdomainrelay/logger@0"
         ]
       },
       "lib/hono-factory-did-key-relay-relayer-xrpc": {
@@ -92,7 +210,8 @@
           "jsr:@hono/hono@*",
           "jsr:@publicdomainrelay/did-key-relay-common@0",
           "jsr:@publicdomainrelay/did-key-relay-relayer-abc@0",
-          "jsr:@publicdomainrelay/did-key-relay-relayer-xrpc@0"
+          "jsr:@publicdomainrelay/did-key-relay-relayer-xrpc@0",
+          "jsr:@publicdomainrelay/logger@0"
         ]
       },
       "lib/hono-factory-did-key-relay-subscriber-xrpc": {

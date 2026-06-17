@@ -27,7 +27,7 @@ const app = createRelayFactory({
 
 if (options.unixSocket) {
   const socketPath = options.unixSocket as string;
-  try { Deno.removeSync(socketPath); } catch { /* may not exist */ }
+  try { Deno.removeSync(socketPath); } catch { }
   Deno.serve({ path: socketPath, onListen: (localAddr) => log.info("listening", { component: "relay", localAddr: (localAddr as Deno.UnixAddr).path }) }, app.fetch);
 } else {
   const port = options.port as number;
