@@ -10,6 +10,7 @@
     "jsr:@std/text@^1.0.19": "1.0.19",
     "npm:@atproto/api@*": "0.20.14",
     "npm:@atproto/crypto@*": "0.5.0",
+    "npm:@atproto/crypto@0.5": "0.5.0",
     "npm:@atproto/identity@*": "0.5.0"
   },
   "jsr": {
@@ -195,7 +196,8 @@
       "lib/did-key-relay-relayer-xrpc": {
         "dependencies": [
           "jsr:@publicdomainrelay/did-key-relay-common@0",
-          "jsr:@publicdomainrelay/did-key-relay-relayer-abc@0"
+          "jsr:@publicdomainrelay/did-key-relay-relayer-abc@0",
+          "npm:@atproto/crypto@0.5"
         ]
       },
       "lib/did-key-relay-subscriber-xrpc": {
@@ -222,9 +224,30 @@
       }
     },
     "links": {
+      "jsr:@publicdomainrelay/atproto-attestation-port@0.0.0": {
+        "dependencies": [
+          "npm:@ipld/dag-cbor@^9.2.0",
+          "npm:@noble/curves@^1.9.7",
+          "npm:@noble/hashes@^1.8.0",
+          "npm:multiformats@^13.3.0"
+        ]
+      },
+      "jsr:@publicdomainrelay/atproto-helpers@0.0.0": {
+        "dependencies": [
+          "npm:@atproto/api@~0.20.8",
+          "npm:@atproto/common-web@0.5",
+          "npm:@atproto/identity@0.5"
+        ]
+      },
       "jsr:@publicdomainrelay/cli-args-env@0.1.0": {
         "dependencies": [
           "jsr:@cliffy/command@^1.0.0-rc.7"
+        ]
+      },
+      "jsr:@publicdomainrelay/did-plc@0.0.0": {
+        "dependencies": [
+          "npm:@ipld/dag-cbor@9",
+          "npm:multiformats@13"
         ]
       },
       "jsr:@publicdomainrelay/event-bus@0.1.0": {},
@@ -245,7 +268,8 @@
       },
       "jsr:@publicdomainrelay/hono-http-static@0.1.0": {},
       "jsr:@publicdomainrelay/http-error@0.1.0": {},
-      "jsr:@publicdomainrelay/logger@0.2.0": {}
+      "jsr:@publicdomainrelay/logger@0.2.0": {},
+      "jsr:@publicdomainrelay/utils-attestation-key@0.0.0": {}
     }
   }
 }

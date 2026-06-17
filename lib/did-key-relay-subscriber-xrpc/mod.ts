@@ -21,6 +21,29 @@ export interface RelayRequestResult {
   contentType: string;
 }
 
+function encodeBase64(bytes: Uint8Array): string {
+  let bin = "";
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin);
+}
+
+function decodeBase64(s: string): Uint8Array {
+  const bin = atob(s);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+function httpOrigin(host: string): string {
+  if (host.includes(":") || host === "localhost") return `http://${host}`;
+  return `https://${host}`;
+}
+
+function wsOrigin(host: string): string {
+  if (host.includes(":") || host === "localhost") return `ws://${host}`;
+  return `wss://${host}`;
+}
+
 export async function createSubscriber(
   opts: SubscriberOptions,
 ): Promise<SubscriberHandle> {
@@ -31,42 +54,34 @@ export async function createSubscriber(
   const proxyRef = `did:web:${subdomain}.${hostname}`;
 
   const nonceToken = await opts.getServiceAuthToken(GET_NONCE_NSID);
-  const nonceUrl = new URL(`https://${opts.dispatcherHost}/xrpc/${GET_NONCE_NSID}`);
-  const nonceRes = await fetch(nonceUrl, {
+  const nonceRes = await fetch(`${httpOrigin(opts.dispatcherHost)}/xrpc/${GET_NONCE_NSID}`, {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${nonceToken}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ key: did }),
+    body: JSON.stringify({ key: did, signatures: [] }),
   });
   if (!nonceRes.ok) {
     const err = await nonceRes.text();
     throw new Error(`nonce request failed: ${nonceRes.status} ${err}`);
   }
-  const { nonce } = await nonceRes.json() as { nonce: string; signatures: unknown[] };
+  const { nonce } = await nonceRes.json() as { nonce: string };
 
-  const nonceBytes = new TextEncoder().encode(nonce);
-  const sig = await opts.keypair.sign(nonceBytes);
-  const sigHex = Array.from(sig).map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
+  const sig = await opts.keypair.sign(decodeBase64(nonce));
 
   const registration = JSON.stringify({
+    $type: "com.fedproxy.temp.xrpc.registration",
     key: did,
     nonce,
-    signatures: [{ key: did, signature: sigHex }],
+    signatures: [{ key: did, signature: encodeBase64(sig) }],
   });
 
   const subscribeToken = await opts.getServiceAuthToken(SUBSCRIBE_NSID);
 
-  const wsUrl = new URL(
-    `wss://${opts.dispatcherHost}/xrpc/${SUBSCRIBE_NSID}?registration=${
-      encodeURIComponent(registration)
-    }&did=${encodeURIComponent(did)}&service_auth=${encodeURIComponent(subscribeToken)}`,
-  );
-  if (wsUrl.protocol === "wss:" && hostname === "localhost") {
-    wsUrl.protocol = "ws:";
-  }
+  const wsUrl = `${wsOrigin(opts.dispatcherHost)}/xrpc/${SUBSCRIBE_NSID}?registration=${
+    encodeURIComponent(registration)
+  }&did=${encodeURIComponent(did)}&service_auth=${encodeURIComponent(subscribeToken)}`;
 
   const ws = new WebSocket(wsUrl);
   const registeredPromise = new Promise<void>((resolve, reject) => {

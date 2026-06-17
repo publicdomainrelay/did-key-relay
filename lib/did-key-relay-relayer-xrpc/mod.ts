@@ -1,5 +1,5 @@
 import type { NonceStore, VerifyResult } from "@publicdomainrelay/did-key-relay-relayer-abc";
-import { decodeJwtPayload } from "@publicdomainrelay/did-key-relay-common";
+import { verifySignature } from "@atproto/crypto";
 export { verifyServiceAuth, verifyServiceAuthExt } from "@publicdomainrelay/did-key-relay-common";
 export type { VerifyServiceAuthOptions, VerifyServiceAuthResult } from "@publicdomainrelay/did-key-relay-common";
 
@@ -21,10 +21,23 @@ export function createNonceStore(ttlMs: number): NonceStore {
 
   Deno.unrefTimer?.(purgeInterval);
 
+  function encodeBase64(bytes: Uint8Array): string {
+    let bin = "";
+    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return btoa(bin);
+  }
+
+  function decodeBase64(s: string): Uint8Array {
+    const bin = atob(s);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+
   function generateNonce(): string {
-    const bytes = new Uint8Array(32);
+    const bytes = new Uint8Array(64);
     crypto.getRandomValues(bytes);
-    return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+    return encodeBase64(bytes);
   }
 
   return {
@@ -62,6 +75,20 @@ export function createNonceStore(ttlMs: number): NonceStore {
       const sigs = Array.isArray(reg.signatures) ? reg.signatures : [];
       if (sigs.length === 0) {
         return { ok: false, reason: "no signatures provided" };
+      }
+      const nonceBytes = decodeBase64(reg.nonce);
+      let sigVerified = false;
+      for (const sig of sigs) {
+        if (!sig?.key || !sig?.signature) continue;
+        try {
+          if (await verifySignature(sig.key, nonceBytes, decodeBase64(sig.signature))) {
+            sigVerified = true;
+            break;
+          }
+        } catch { /* try next signature */ }
+      }
+      if (!sigVerified) {
+        return { ok: false, reason: "no signature verifies over the nonce" };
       }
       entries.delete(reg.nonce);
       return { ok: true, key: reg.key };
