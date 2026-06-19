@@ -1,8 +1,13 @@
 import type { RelayResponse } from "@publicdomainrelay/did-key-relay-common";
 
+export type SendFrame = (ws: WebSocket, frame: string) => void;
+export type CloseConnection = (ws: WebSocket, code: number, reason: string) => void;
+
 export interface RelayStateOptions {
   relayTimeoutMs: number;
   reconnectGraceMs: number;
+  onSendFrame: SendFrame;
+  onCloseConnection: CloseConnection;
 }
 
 interface ActiveSubscription {
@@ -30,10 +35,14 @@ export class RelayState {
 
   private pendingRequests = new Map<string, PendingRequest>();
   private reconnectQueues = new Map<string, ReconnectEntry>();
+  private onSendFrame: SendFrame;
+  private onCloseConnection: CloseConnection;
 
   constructor(opts: RelayStateOptions) {
     this.relayTimeoutMs = opts.relayTimeoutMs;
     this.reconnectGraceMs = opts.reconnectGraceMs;
+    this.onSendFrame = opts.onSendFrame;
+    this.onCloseConnection = opts.onCloseConnection;
   }
 
   handleResponse(
@@ -64,7 +73,7 @@ export class RelayState {
         reject(new Error(`relay timeout after ${this.relayTimeoutMs}ms`));
       }, this.relayTimeoutMs);
       this.pendingRequests.set(requestId, { resolve, reject, timer });
-      subWs.send(frame);
+      this.onSendFrame(subWs, frame);
     });
   }
 
@@ -84,7 +93,7 @@ export class RelayState {
         reject(new Error(`relay timeout after ${this.relayTimeoutMs}ms`));
       }, this.relayTimeoutMs);
       this.pendingRequests.set(requestId, { resolve, reject, timer });
-      raw.send(frame);
+      this.onSendFrame(raw, frame);
     }
     this.reconnectQueues.delete(subdomain);
   }
@@ -93,7 +102,7 @@ export class RelayState {
     for (const [subId, sub] of this.activeSubscriptions) {
       if (sub.subdomain === subdomain) {
         if (sub.callerWs.readyState === WebSocket.OPEN) {
-          sub.callerWs.close(4004, "subscriber disconnected");
+          this.onCloseConnection(sub.callerWs, 4004, "subscriber disconnected");
         }
         this.activeSubscriptions.delete(subId);
       }

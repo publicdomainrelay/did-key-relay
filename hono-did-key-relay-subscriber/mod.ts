@@ -1,9 +1,9 @@
 import { Command } from "@publicdomainrelay/cli-args-env";
-import { Hono } from "jsr:@hono/hono";
-import { cors } from "jsr:@hono/hono/cors";
-import { Secp256k1Keypair } from "npm:@atproto/crypto";
-import { Agent, CredentialSession } from "npm:@atproto/api";
-import { IdResolver } from "npm:@atproto/identity";
+import { Hono } from "@hono/hono";
+import { cors } from "@hono/hono/cors";
+import { Secp256k1Keypair } from "@atproto/crypto";
+import { Agent, CredentialSession } from "@atproto/api";
+import { IdResolver } from "@atproto/identity";
 import { createStructuredLogger } from "@publicdomainrelay/logger";
 import { hostnameOnly, DEFAULT_MARKET_SERVICE_ID, verifyServiceAuthExt } from "@publicdomainrelay/did-key-relay-common";
 import { createSubscriber } from "@publicdomainrelay/did-key-relay-subscriber-xrpc";
@@ -24,7 +24,7 @@ const { options } = await new Command(
   runtimeConfig,
 ).resolve();
 
-const keypairPath = (options.keypairPath as string) ?? "./keypair.json";
+const keypairPath = options.keypairPath as string;
 
 function bytesToHex(bytes: Uint8Array): string { return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join(""); }
 function hexToBytes(hex: string): Uint8Array { const o = new Uint8Array(hex.length / 2); for (let i = 0; i < o.length; i++) o[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16); return o; }

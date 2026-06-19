@@ -12,7 +12,8 @@
     },
     "keypair-path": {
       "type": "string",
-      "description": "Path to keypair file (default ./keypair.json)"
+      "description": "Path to keypair file",
+      "default": "./keypair.json"
     },
     "dispatcher-host": {
       "type": "string",

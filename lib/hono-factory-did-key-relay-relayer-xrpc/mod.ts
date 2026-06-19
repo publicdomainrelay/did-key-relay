@@ -31,7 +31,12 @@ export function createRelayFactory(opts: RelayFactoryOptions) {
   const reconnectGraceMs = opts.reconnectGraceMs ?? 10_000;
   const nonceTtlMs = opts.nonceTtlMs ?? 60_000;
 
-  const state = new RelayState({ relayTimeoutMs, reconnectGraceMs });
+  const state = new RelayState({
+    relayTimeoutMs,
+    reconnectGraceMs,
+    onSendFrame: (ws, frame) => { ws.send(frame); },
+    onCloseConnection: (ws, code, reason) => { ws.close(code, reason); },
+  });
   const nonceStore = createNonceStore(nonceTtlMs);
 
   return createFactory({
