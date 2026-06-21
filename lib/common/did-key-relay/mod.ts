@@ -3,26 +3,7 @@ export const GET_NONCE_NSID = "com.fedproxy.temp.xrpc.getRegistrationNonce";
 
 export const DEFAULT_MARKET_SERVICE_ID = "pdr_temp_market";
 
-export function hostnameOnly(host: string): string {
-  let h = host;
-  if (h.startsWith("[")) {
-    const end = h.indexOf("]");
-    if (end !== -1) h = h.slice(1, end);
-  }
-  const portIdx = h.lastIndexOf(":");
-  if (portIdx !== -1 && portIdx > (h.startsWith("[") ? h.indexOf("]") : 0)) {
-    h = h.slice(0, portIdx);
-  }
-  return h;
-}
-
-export function hostnameToDid(hostname: string): string {
-  return `did:web:${hostnameOnly(hostname)}`;
-}
-
-export function didToSubdomain(did: string): string {
-  return did.replaceAll(":", "-").toLowerCase();
-}
+export { hostnameOnly, hostnameToDid, didToSubdomain } from "@publicdomainrelay/hostname-helpers";
 
 export interface RelayRequestFrame {
   requestId: string;

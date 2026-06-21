@@ -15,6 +15,7 @@
   "imports": {
     "@std/assert": "jsr:@std/assert@^1.0.19",
     "@publicdomainrelay/cli-args-env": "../typescript-helpers/lib/cli-args-env/mod.ts",
-    "@publicdomainrelay/logger": "../typescript-helpers/lib/logger/mod.ts"
+    "@publicdomainrelay/logger": "../typescript-helpers/lib/logger/mod.ts",
+    "@publicdomainrelay/hostname-helpers": "../typescript-helpers/lib/hostname-helpers/mod.ts"
   }
 }
