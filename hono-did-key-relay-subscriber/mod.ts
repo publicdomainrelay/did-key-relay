@@ -4,13 +4,13 @@ import { cors } from "@hono/hono/cors";
 import { Secp256k1Keypair } from "@atproto/crypto";
 import { Agent, CredentialSession } from "@atproto/api";
 import { IdResolver } from "@atproto/identity";
-import { createStructuredLogger } from "@publicdomainrelay/logger";
+import { createLogger } from "@publicdomainrelay/logger";
 import { hostnameOnly, DEFAULT_MARKET_SERVICE_ID, verifyServiceAuthExt } from "@publicdomainrelay/did-key-relay-common";
 import { createSubscriber } from "@publicdomainrelay/did-key-relay-subscriber-xrpc";
 import { createSubscriberFactory } from "@publicdomainrelay/hono-factory-did-key-relay-subscriber-xrpc";
 import cliArgsEnv from "./cli-args-env.json" with { type: "json" };
 
-const log = createStructuredLogger("subscriber");
+const log = createLogger({ serviceName: "subscriber" });
 
 let runtimeConfig = null;
 try {

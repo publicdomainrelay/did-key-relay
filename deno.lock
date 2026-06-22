@@ -6,6 +6,7 @@
     "jsr:@cliffy/internal@1.2.1": "1.2.1",
     "jsr:@cliffy/table@1.2.1": "1.2.1",
     "jsr:@hono/hono@*": "4.12.24",
+    "jsr:@hono/hono@4": "4.12.24",
     "jsr:@std/fmt@^1.0.10": "1.0.10",
     "jsr:@std/text@^1.0.19": "1.0.19",
     "npm:@atproto/api@*": "0.20.14",
@@ -253,12 +254,19 @@
           "jsr:@publicdomainrelay/cli-args-env@0",
           "jsr:@publicdomainrelay/event-bus@0",
           "jsr:@publicdomainrelay/hono-factory-static-files-fs@0",
-          "jsr:@publicdomainrelay/logger@0"
+          "jsr:@publicdomainrelay/logger@0",
+          "jsr:@publicdomainrelay/serve@0"
         ]
       },
       "jsr:@publicdomainrelay/hostname-helpers@0.1.0": {},
       "jsr:@publicdomainrelay/http-error@0.1.0": {},
-      "jsr:@publicdomainrelay/logger@0.2.0": {}
+      "jsr:@publicdomainrelay/logger@0.2.0": {},
+      "jsr:@publicdomainrelay/serve@0.0.0": {
+        "dependencies": [
+          "jsr:@hono/hono@4",
+          "jsr:@publicdomainrelay/logger@0"
+        ]
+      }
     }
   }
 }

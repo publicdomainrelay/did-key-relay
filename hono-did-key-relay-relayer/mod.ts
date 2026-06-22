@@ -1,9 +1,10 @@
 import { Command } from "@publicdomainrelay/cli-args-env";
-import { createStructuredLogger } from "@publicdomainrelay/logger";
+import { createLogger } from "@publicdomainrelay/logger";
+import { createServe } from "@publicdomainrelay/serve";
 import { createRelayFactory } from "@publicdomainrelay/hono-factory-did-key-relay-relayer-xrpc";
 import cliArgsEnv from "./cli-args-env.json" with { type: "json" };
 
-const log = createStructuredLogger("relay");
+const logger = createLogger({ serviceName: "relay" });
 
 let runtimeConfig = null;
 try {
@@ -25,11 +26,19 @@ const app = createRelayFactory({
   nonceTtlMs: options.nonceTtlMs as number | undefined,
 }).createApp();
 
-if (options.unixSocket) {
-  const socketPath = options.unixSocket as string;
-  try { Deno.removeSync(socketPath); } catch { }
-  Deno.serve({ path: socketPath, onListen: (localAddr) => log.info("listening", { component: "relay", localAddr: (localAddr as Deno.UnixAddr).path }) }, app.fetch);
-} else {
-  const port = options.port as number;
-  Deno.serve({ port, onListen: (localAddr) => log.info("listening", { component: "relay", localAddr: (localAddr as Deno.NetAddr).hostname, port: (localAddr as Deno.NetAddr).port }) }, app.fetch);
+const unixSocket = options.unixSocket as string | undefined;
+const serve = createServe({
+  logger,
+  unix: unixSocket ? { socketPath: unixSocket } : undefined,
+  tcp: unixSocket ? undefined : { port: options.port as number },
+});
+serve.app.route("/", app as never);
+
+function shutdown() {
+  serve.shutdown();
+  Deno.exit();
 }
+Deno.addSignalListener("SIGINT", shutdown);
+Deno.addSignalListener("SIGTERM", shutdown);
+
+await serve.beginServe();

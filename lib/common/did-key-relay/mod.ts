@@ -62,16 +62,22 @@ export function verifyServiceAuth(
   authHeader: string | null | undefined,
   audDid: string,
   lxm: string,
-  _serviceAuth?: string,
+  serviceAuth?: string,
 ): void {
-  if (!authHeader) {
+  // WebSocket clients cannot set request headers, so the subscribe handshake
+  // carries the service-auth token as a `service_auth` query param instead.
+  let token: string;
+  if (authHeader) {
+    const parts = authHeader.split(" ");
+    if (parts.length !== 2 || parts[0].toLowerCase() !== "bearer") {
+      throw new Error("Authorization header must be Bearer <token>");
+    }
+    token = parts[1];
+  } else if (serviceAuth) {
+    token = serviceAuth;
+  } else {
     throw new Error("missing Authorization header");
   }
-  const parts = authHeader.split(" ");
-  if (parts.length !== 2 || parts[0].toLowerCase() !== "bearer") {
-    throw new Error("Authorization header must be Bearer <token>");
-  }
-  const token = parts[1];
   let payload: Record<string, unknown>;
   try {
     payload = decodeJwtPayload(token);
