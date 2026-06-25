@@ -288,7 +288,11 @@
           "jsr:@cliffy/command@^1.0.0-rc.7"
         ]
       },
-      "jsr:@publicdomainrelay/cloud-init-common@0.0.0": {},
+      "jsr:@publicdomainrelay/cloud-init-common@0.0.0": {
+        "dependencies": [
+          "npm:yaml@^2.7.0"
+        ]
+      },
       "jsr:@publicdomainrelay/compute-deno-abc@0.0.0": {
         "dependencies": [
           "jsr:@publicdomainrelay/compute-deno-common@0"
@@ -348,6 +352,7 @@
         ]
       },
       "jsr:@publicdomainrelay/event-bus@0.1.0": {},
+      "jsr:@publicdomainrelay/fedproxy-rbac-common@0.0.0": {},
       "jsr:@publicdomainrelay/firehose-watcher-abc@0.0.0": {
         "dependencies": [
           "jsr:@publicdomainrelay/logger@0"
@@ -551,6 +556,7 @@
           "jsr:@publicdomainrelay/atproto-repo-deno@0",
           "jsr:@publicdomainrelay/cloud-init-common@0",
           "jsr:@publicdomainrelay/did-plc@0",
+          "jsr:@publicdomainrelay/fedproxy-rbac-common@0",
           "jsr:@publicdomainrelay/hono-factory-atproto-repo-deno@0",
           "jsr:@publicdomainrelay/logger@0",
           "jsr:@publicdomainrelay/market-abc@0",
