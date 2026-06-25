@@ -1,5 +1,6 @@
 export const SUBSCRIBE_NSID = "com.fedproxy.temp.xrpc.subscribe";
 export const GET_NONCE_NSID = "com.fedproxy.temp.xrpc.getRegistrationNonce";
+export const TUNNEL_NSID = "com.fedproxy.temp.xrpc.tunnel";
 
 export const DEFAULT_MARKET_SERVICE_ID = "pdr_temp_market";
 

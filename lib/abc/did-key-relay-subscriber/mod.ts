@@ -12,6 +12,12 @@ export interface SubscriberOptions {
   handleRequest?: (
     req: RelayRequest,
   ) => Promise<{ status: number; body: unknown; contentType: string }>;
+  /**
+   * When set, inbound relay subscriptions for the tunnel NSID open a TCP
+   * connection to this target and pipe bytes full-duplex over the relay
+   * (raw byte stream, e.g. SSH-over-websocket).
+   */
+  tunnelTarget?: { hostname: string; port: number };
 }
 
 export interface SubscriberHandle {

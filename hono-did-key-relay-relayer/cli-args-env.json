@@ -43,6 +43,18 @@
       "description": "TTL for nonces",
       "env": "NONCE_TTL_MS",
       "default": 60000
+    },
+    "additional-hosts": {
+      "type": "string",
+      "description": "Comma-separated extra hostnames accepted on control endpoints. \"*\" allows all.",
+      "env": "ADDITIONAL_HOSTS",
+      "default": ""
+    },
+    "allowed-dids": {
+      "type": "string",
+      "description": "Comma-separated DIDs allowed to register. Empty = allow all.",
+      "env": "ALLOWED_DIDS",
+      "default": ""
     }
   }
 }

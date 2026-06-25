@@ -4,6 +4,7 @@ import {
   didToSubdomain,
   SUBSCRIBE_NSID,
   GET_NONCE_NSID,
+  TUNNEL_NSID,
   summarizeFrame,
 } from "@publicdomainrelay/did-key-relay-common";
 import type {
@@ -32,6 +33,11 @@ function decodeBase64(s: string): Uint8Array {
   const out = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
   return out;
+}
+
+async function writeAll(conn: Deno.Conn, data: Uint8Array): Promise<void> {
+  let off = 0;
+  while (off < data.length) off += await conn.write(data.subarray(off));
 }
 
 function httpOrigin(host: string): string {
@@ -84,6 +90,74 @@ export async function createSubscriber(
   }&did=${encodeURIComponent(did)}&service_auth=${encodeURIComponent(subscribeToken)}`;
 
   const ws = new WebSocket(wsUrl);
+
+  interface TunnelState { conn?: Deno.Conn; queue: Uint8Array[]; closed: boolean; }
+  const tunnels = new Map<string, TunnelState>();
+
+  function closeTunnel(subscriptionId: string): void {
+    const t = tunnels.get(subscriptionId);
+    if (!t) return;
+    t.closed = true;
+    tunnels.delete(subscriptionId);
+    if (t.conn) { try { t.conn.close(); } catch { /* already closed */ } }
+  }
+
+  function tunnelInbound(subscriptionId: string, bytes: Uint8Array): void {
+    const t = tunnels.get(subscriptionId);
+    if (!t) return;
+    if (t.conn) writeAll(t.conn, bytes).catch(() => closeTunnel(subscriptionId));
+    else t.queue.push(bytes); // conn not ready yet; flush on open
+  }
+
+  async function startTunnel(subscriptionId: string): Promise<void> {
+    const target = opts.tunnelTarget!;
+    // Register synchronously so inbound data frames (which can arrive before
+    // Deno.connect resolves) are queued, not dropped.
+    const t: TunnelState = { queue: [], closed: false };
+    tunnels.set(subscriptionId, t);
+    let conn: Deno.Conn;
+    try {
+      conn = await Deno.connect({ hostname: target.hostname, port: target.port });
+    } catch (err) {
+      tunnels.delete(subscriptionId);
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          $type: `${SUBSCRIBE_NSID}#subscriptionClose`,
+          subscriptionId,
+          code: 1011,
+          reason: String(err),
+        }));
+      }
+      return;
+    }
+    if (t.closed) { try { conn.close(); } catch { /* ok */ } return; }
+    t.conn = conn;
+    try {
+      for (const chunk of t.queue) await writeAll(conn, chunk);
+    } catch { closeTunnel(subscriptionId); return; }
+    t.queue.length = 0;
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ $type: `${SUBSCRIBE_NSID}#subscriptionOpen`, subscriptionId }));
+    }
+    const buf = new Uint8Array(64 * 1024);
+    try {
+      while (true) {
+        const n = await conn.read(buf);
+        if (n === null) break;
+        if (ws.readyState !== WebSocket.OPEN) break;
+        ws.send(JSON.stringify({
+          $type: `${SUBSCRIBE_NSID}#subscriptionData`,
+          subscriptionId,
+          data: encodeBase64(buf.subarray(0, n)),
+        }));
+      }
+    } catch { /* connection closed */ }
+    closeTunnel(subscriptionId);
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ $type: `${SUBSCRIBE_NSID}#subscriptionClose`, subscriptionId, code: 1000 }));
+    }
+  }
+
   const registeredPromise = new Promise<void>((resolve, reject) => {
     const timeout = setTimeout(
       () => reject(new Error("registration timeout")),
@@ -146,6 +220,10 @@ export async function createSubscriber(
           break;
         }
         case "subscribe": {
+          if (opts.tunnelTarget && (msg.nsid as string | undefined) === TUNNEL_NSID) {
+            void startTunnel(msg.subscriptionId as string);
+            break;
+          }
           if (opts.synthetic) {
             const subscriptionId = msg.subscriptionId as string;
             if (ws.readyState === WebSocket.OPEN) {
@@ -178,7 +256,17 @@ export async function createSubscriber(
           }
           break;
         }
-        case "subscriptionCancel": {
+        case "subscriptionData": {
+          const subscriptionId = msg.subscriptionId as string | undefined;
+          if (subscriptionId && typeof msg.data === "string") {
+            tunnelInbound(subscriptionId, decodeBase64(msg.data));
+          }
+          break;
+        }
+        case "subscriptionCancel":
+        case "subscriptionClose": {
+          const subscriptionId = msg.subscriptionId as string | undefined;
+          if (subscriptionId) closeTunnel(subscriptionId);
           break;
         }
       }
@@ -195,6 +283,62 @@ export async function createSubscriber(
 
   await registeredPromise;
   return { subdomain, proxyRef, ws };
+}
+
+export interface TunnelClientOptions {
+  dispatcherHost: string;
+  subscriberSubdomain: string;
+  nsid?: string;
+  readable: ReadableStream<Uint8Array>;
+  writable: WritableStream<Uint8Array>;
+}
+
+/**
+ * Bridge a local byte stream to a remote TCP target through the relay tunnel.
+ * Pipes `readable` -> relay -> subscriber's tunnelTarget, and the target's
+ * bytes back into `writable`. Resolves when the tunnel closes. Usable as an
+ * SSH `ProxyCommand` (stdin/stdout) or to bridge an accepted TCP conn.
+ */
+export function tunnelOverRelay(opts: TunnelClientOptions): Promise<void> {
+  const nsid = opts.nsid ?? TUNNEL_NSID;
+  const host = `${opts.subscriberSubdomain}.${opts.dispatcherHost}`;
+  const url = `${wsOrigin(host)}/xrpc/${nsid}`;
+  return new Promise<void>((resolve, reject) => {
+    const ws = new WebSocket(url);
+    ws.binaryType = "arraybuffer";
+    const writer = opts.writable.getWriter();
+    let settled = false;
+    const finish = (err?: unknown) => {
+      if (settled) return;
+      settled = true;
+      writer.close().catch(() => {});
+      if (err) reject(err instanceof Error ? err : new Error(String(err)));
+      else resolve();
+    };
+    ws.onopen = () => {
+      (async () => {
+        const reader = opts.readable.getReader();
+        try {
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            if (ws.readyState !== WebSocket.OPEN) break;
+            ws.send(value);
+          }
+        } catch { /* upstream closed */ }
+        try { ws.close(); } catch { /* already closing */ }
+      })();
+    };
+    ws.onmessage = (evt) => {
+      const data = evt.data;
+      let bytes: Uint8Array | null = null;
+      if (data instanceof ArrayBuffer) bytes = new Uint8Array(data);
+      else if (typeof data === "string") bytes = new TextEncoder().encode(data);
+      if (bytes) writer.write(bytes).catch(() => {});
+    };
+    ws.onerror = () => finish(new Error("tunnel websocket error"));
+    ws.onclose = () => finish();
+  });
 }
 
 export function createCaller(opts: CallerOptions): CallerHandle {

@@ -16,16 +16,46 @@ import {
   verifyServiceAuth,
 } from "@publicdomainrelay/did-key-relay-relayer-xrpc";
 
+function encodeBase64(bytes: Uint8Array): string {
+  let bin = "";
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin);
+}
+
+function decodeBase64(s: string): Uint8Array {
+  const bin = atob(s);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
 export interface RelayFactoryOptions {
   hostname: string;
   serviceId?: string;
   relayTimeoutMs?: number;
   reconnectGraceMs?: number;
   nonceTtlMs?: number;
+  /**
+   * Extra base hostnames accepted on the control endpoints (getNonce,
+   * subscribe). Lets a subscriber that reaches the relay via a different
+   * address (e.g. a container dialing the host gateway IP) still register,
+   * while data routing stays keyed to `hostname`. Default: none.
+   */
+  additionalHosts?: string[];
+  /**
+   * If non-empty, only these DIDs may register as subscribers on the relay.
+   * Empty (default) means any DID with a valid registration is accepted.
+   */
+  allowedDids?: string[];
 }
 
 export function createRelayFactory(opts: RelayFactoryOptions) {
   const hostname = opts.hostname;
+  const additionalHosts = opts.additionalHosts ?? [];
+  const allowAllHosts = additionalHosts.includes("*");
+  const allowedDids = opts.allowedDids ?? [];
+  const isControlHost = (host: string): boolean =>
+    allowAllHosts || host === hostname || additionalHosts.includes(host);
   const serviceId = opts.serviceId ?? "xrpc_relay";
   const relayTimeoutMs = opts.relayTimeoutMs ?? 30_000;
   const reconnectGraceMs = opts.reconnectGraceMs ?? 10_000;
@@ -74,7 +104,7 @@ export function createRelayFactory(opts: RelayFactoryOptions) {
       });
 
       app.post(`/xrpc/${GET_NONCE_NSID}`, async (c, next) => {
-        if (hostnameOnly(c.req.header("host") ?? hostname) !== hostname) return next();
+        if (!isControlHost(hostnameOnly(c.req.header("host") ?? hostname))) return next();
         try {
           await verifyServiceAuth(c.req.header("Authorization"), hostnameToDid(hostname), GET_NONCE_NSID);
         } catch (err) {
@@ -122,6 +152,11 @@ export function createRelayFactory(opts: RelayFactoryOptions) {
               raw.close(1008, "did does not match registration key");
               return;
             }
+            if (allowedDids.length && !allowedDids.includes(clientDid)) {
+              log.warn("did_not_allowed", { component: "relay", did: clientDid });
+              raw.close(1008, "DID not in allowlist");
+              return;
+            }
             state.subscribers.set(subdomain, raw);
             log.info("subscriber_connected", { component: "relay", subdomain, key: result.key });
             state.flushReconnectQueue(subdomain, raw);
@@ -155,6 +190,16 @@ export function createRelayFactory(opts: RelayFactoryOptions) {
                 sub.callerWs.send(JSON.stringify(msg.message));
                 break;
               }
+              case "subscriptionData": {
+                const subId = msg.subscriptionId as string | undefined;
+                if (!subId) return;
+                const sub = state.activeSubscriptions.get(subId);
+                if (!sub || sub.callerWs.readyState !== WebSocket.OPEN) return;
+                const data = msg.data as string | undefined;
+                if (typeof data !== "string") return;
+                sub.callerWs.send(decodeBase64(data));
+                break;
+              }
               case "subscriptionClose": {
                 const subId = msg.subscriptionId as string | undefined;
                 if (!subId) return;
@@ -184,7 +229,7 @@ export function createRelayFactory(opts: RelayFactoryOptions) {
       });
 
       app.get(`/xrpc/${SUBSCRIBE_NSID}`, async (c, next) => {
-        if (hostnameOnly(c.req.header("host") ?? hostname) !== hostname) return next();
+        if (!isControlHost(hostnameOnly(c.req.header("host") ?? hostname))) return next();
         try {
           const serviceAuth = c.req.query("service_auth");
           await verifyServiceAuth(c.req.header("Authorization"), hostnameToDid(hostname), SUBSCRIBE_NSID, serviceAuth);
@@ -206,6 +251,7 @@ export function createRelayFactory(opts: RelayFactoryOptions) {
         return {
           onOpen(_evt, ws) {
             const raw = ws.raw as WebSocket;
+            raw.binaryType = "arraybuffer";
             const subWs = state.subscribers.get(subdomain);
             if (!subWs || subWs.readyState !== WebSocket.OPEN) {
               raw.close(4004, `no active subscriber for subdomain ${subdomain}`);
@@ -217,6 +263,23 @@ export function createRelayFactory(opts: RelayFactoryOptions) {
               subscriptionId,
               nsid,
               params,
+            }));
+          },
+
+          onMessage(evt) {
+            const sub = state.activeSubscriptions.get(subscriptionId);
+            if (!sub) return;
+            const subWs = state.subscribers.get(subdomain);
+            if (!subWs || subWs.readyState !== WebSocket.OPEN) return;
+            const data = evt.data;
+            let bytes: Uint8Array | null = null;
+            if (data instanceof ArrayBuffer) bytes = new Uint8Array(data);
+            else if (typeof data === "string") bytes = new TextEncoder().encode(data);
+            if (!bytes) return;
+            subWs.send(JSON.stringify({
+              $type: `${SUBSCRIBE_NSID}#subscriptionData`,
+              subscriptionId,
+              data: encodeBase64(bytes),
             }));
           },
 
