@@ -59,47 +59,95 @@ export async function createSubscriber(
   const hostname = hostnameOnly(opts.dispatcherHost);
   const proxyRef = `did:web:${subdomain}.${hostname}`;
 
-  const nonceToken = await opts.getServiceAuthToken(GET_NONCE_NSID);
-  const nonceRes = await fetch(`${httpOrigin(opts.dispatcherHost)}/xrpc/${GET_NONCE_NSID}`, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${nonceToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ key: did, signatures: [] }),
-  });
-  if (!nonceRes.ok) {
-    const err = await nonceRes.text();
-    throw new Error(`nonce request failed: ${nonceRes.status} ${err}`);
-  }
-  const { nonce } = await nonceRes.json() as { nonce: string };
-
-  const sig = await opts.keypair.sign(decodeBase64(nonce));
-
-  const registration = JSON.stringify({
-    $type: "com.fedproxy.temp.xrpc.registration",
-    key: did,
-    nonce,
-    signatures: [{ key: did, signature: encodeBase64(sig) }],
-  });
-
-  const subscribeToken = await opts.getServiceAuthToken(SUBSCRIBE_NSID);
-
-  const wsUrl = `${wsOrigin(opts.dispatcherHost)}/xrpc/${SUBSCRIBE_NSID}?registration=${
-    encodeURIComponent(registration)
-  }&did=${encodeURIComponent(did)}&service_auth=${encodeURIComponent(subscribeToken)}`;
-
-  const ws = new WebSocket(wsUrl);
+  // `ws` is reassigned on every reconnect; helpers/handlers below read the
+  // current socket through this binding. Registration (nonce -> sign -> connect)
+  // re-runs each attempt since the nonce is single-use.
+  let ws!: WebSocket;
+  let closed = false;
+  let everRegistered = false;
+  let reconnectAttempts = 0;
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  const syntheticIntervals = new Set<ReturnType<typeof setInterval>>();
 
   interface TunnelState { conn?: Deno.Conn; queue: Uint8Array[]; closed: boolean; }
   const tunnels = new Map<string, TunnelState>();
+  const wsSubs = new Map<string, WebSocket>();
 
   function closeTunnel(subscriptionId: string): void {
     const t = tunnels.get(subscriptionId);
-    if (!t) return;
-    t.closed = true;
-    tunnels.delete(subscriptionId);
-    if (t.conn) { try { t.conn.close(); } catch { /* already closed */ } }
+    if (t) {
+      t.closed = true;
+      tunnels.delete(subscriptionId);
+      if (t.conn) { try { t.conn.close(); } catch { /* already closed */ } }
+    }
+    const localWs = wsSubs.get(subscriptionId);
+    if (localWs) {
+      wsSubs.delete(subscriptionId);
+      try { localWs.close(); } catch { /* already closed */ }
+    }
+  }
+
+  function startWsSubscription(
+    subscriptionId: string,
+    nsid: string,
+    params: Record<string, string>,
+  ): void {
+    const target = opts.wsTarget?.();
+    if (!target) return;
+    const qs = new URLSearchParams(params ?? {}).toString();
+    const url = `ws://${target.hostname}:${target.port}/xrpc/${nsid}${qs ? `?${qs}` : ""}`;
+    let local: WebSocket;
+    try {
+      local = new WebSocket(url);
+    } catch (err) {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          $type: `${SUBSCRIBE_NSID}#subscriptionClose`,
+          subscriptionId,
+          code: 1011,
+          reason: String(err),
+        }));
+      }
+      return;
+    }
+    local.binaryType = "arraybuffer";
+    wsSubs.set(subscriptionId, local);
+    local.onopen = () => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ $type: `${SUBSCRIBE_NSID}#subscriptionOpen`, subscriptionId }));
+      }
+    };
+    local.onmessage = (evt) => {
+      if (ws.readyState !== WebSocket.OPEN) return;
+      const data = evt.data;
+      if (typeof data === "string") {
+        let message: unknown;
+        try { message = JSON.parse(data); } catch { return; }
+        ws.send(JSON.stringify({
+          $type: `${SUBSCRIBE_NSID}#subscriptionEvent`,
+          subscriptionId,
+          message,
+        }));
+      } else if (data instanceof ArrayBuffer) {
+        ws.send(JSON.stringify({
+          $type: `${SUBSCRIBE_NSID}#subscriptionData`,
+          subscriptionId,
+          data: encodeBase64(new Uint8Array(data)),
+        }));
+      }
+    };
+    local.onclose = (evt) => {
+      wsSubs.delete(subscriptionId);
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          $type: `${SUBSCRIBE_NSID}#subscriptionClose`,
+          subscriptionId,
+          code: evt.code || 1000,
+          reason: evt.reason,
+        }));
+      }
+    };
+    local.onerror = () => { /* close follows */ };
   }
 
   function tunnelInbound(subscriptionId: string, bytes: Uint8Array): void {
@@ -158,131 +206,211 @@ export async function createSubscriber(
     }
   }
 
-  const registeredPromise = new Promise<void>((resolve, reject) => {
-    const timeout = setTimeout(
-      () => reject(new Error("registration timeout")),
-      30_000,
-    );
-    ws.onopen = () => {
-      log.info("ws_open", { component: label, host: opts.dispatcherHost });
-    };
-    ws.onmessage = (evt) => {
-      let msg: Record<string, unknown>;
-      try {
-        msg = JSON.parse(evt.data as string) as Record<string, unknown>;
-      } catch {
-        return;
-      }
-      const $type = msg.$type as string | undefined;
-      if ($type === `${SUBSCRIBE_NSID}#registered`) {
-        clearTimeout(timeout);
-        resolve();
-        return;
-      }
-      if (!$type?.startsWith(`${SUBSCRIBE_NSID}#`)) return;
-      const kind = $type.slice($type.indexOf("#") + 1);
-      switch (kind) {
-        case "request": {
-          if (opts.handleRequest) {
-            const req: RelayRequest = {
-              requestId: msg.requestId as string,
-              method: msg.method as string,
-              path: msg.path as string,
-              params: (msg.params as Record<string, string>) ?? {},
-              body: msg.body,
-              headers: (msg.headers as Record<string, string>) ?? {},
-            };
-            opts.handleRequest(req).then(
-              (result) => {
-                if (ws.readyState === WebSocket.OPEN) {
-                  ws.send(JSON.stringify({
-                    $type: `${SUBSCRIBE_NSID}#response`,
-                    requestId: msg.requestId,
-                    status: result.status,
-                    body: result.body,
-                    contentType: result.contentType,
-                  }));
-                }
-              },
-              (err) => {
-                if (ws.readyState === WebSocket.OPEN) {
-                  ws.send(JSON.stringify({
-                    $type: `${SUBSCRIBE_NSID}#response`,
-                    requestId: msg.requestId,
-                    status: 500,
-                    body: { error: "InternalError", message: String(err) },
-                    contentType: "application/json",
-                  }));
-                }
-              },
-            );
-          }
-          break;
-        }
-        case "subscribe": {
-          if (opts.tunnelTarget && (msg.nsid as string | undefined) === TUNNEL_NSID) {
-            void startTunnel(msg.subscriptionId as string);
-            break;
-          }
-          if (opts.synthetic) {
-            const subscriptionId = msg.subscriptionId as string;
-            if (ws.readyState === WebSocket.OPEN) {
-              ws.send(JSON.stringify({
-                $type: `${SUBSCRIBE_NSID}#subscriptionOpen`,
-                subscriptionId,
-              }));
-            }
-            let seq = 0;
-            const interval = setInterval(() => {
-              if (ws.readyState !== WebSocket.OPEN) {
-                clearInterval(interval);
-                return;
+  function handleFrame(msg: Record<string, unknown>): void {
+    const $type = msg.$type as string | undefined;
+    if (!$type?.startsWith(`${SUBSCRIBE_NSID}#`)) return;
+    const kind = $type.slice($type.indexOf("#") + 1);
+    switch (kind) {
+      case "request": {
+        if (opts.handleRequest) {
+          const req: RelayRequest = {
+            requestId: msg.requestId as string,
+            method: msg.method as string,
+            path: msg.path as string,
+            params: (msg.params as Record<string, string>) ?? {},
+            body: msg.body,
+            headers: (msg.headers as Record<string, string>) ?? {},
+          };
+          opts.handleRequest(req).then(
+            (result) => {
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                  $type: `${SUBSCRIBE_NSID}#response`,
+                  requestId: msg.requestId,
+                  status: result.status,
+                  body: result.body,
+                  contentType: result.contentType,
+                }));
               }
-              ws.send(JSON.stringify({
-                $type: `${SUBSCRIBE_NSID}#subscriptionEvent`,
-                subscriptionId,
-                message: {
-                  seq: seq++,
-                  time: new Date().toISOString(),
-                  event: "synthetic",
-                },
-              }));
-            }, 5000);
-            const origOnClose = ws.onclose;
-            ws.onclose = (evt) => {
-              clearInterval(interval);
-              origOnClose?.call(ws, evt);
-            };
-          }
-          break;
+            },
+            (err) => {
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                  $type: `${SUBSCRIBE_NSID}#response`,
+                  requestId: msg.requestId,
+                  status: 500,
+                  body: { error: "InternalError", message: String(err) },
+                  contentType: "application/json",
+                }));
+              }
+            },
+          );
         }
-        case "subscriptionData": {
-          const subscriptionId = msg.subscriptionId as string | undefined;
-          if (subscriptionId && typeof msg.data === "string") {
-            tunnelInbound(subscriptionId, decodeBase64(msg.data));
-          }
-          break;
-        }
-        case "subscriptionCancel":
-        case "subscriptionClose": {
-          const subscriptionId = msg.subscriptionId as string | undefined;
-          if (subscriptionId) closeTunnel(subscriptionId);
-          break;
-        }
+        break;
       }
-    };
-    ws.onerror = (evt) => {
-      log.error("ws_error", { component: label, error: String(evt) });
-      clearTimeout(timeout);
-      reject(new Error("WebSocket error during registration"));
-    };
-    ws.onclose = (evt) => {
-      log.info("ws_close", { component: label, code: evt.code, reason: evt.reason });
-    };
-  });
+      case "subscribe": {
+        const subNsid = msg.nsid as string | undefined;
+        if (opts.tunnelTarget && subNsid === TUNNEL_NSID) {
+          void startTunnel(msg.subscriptionId as string);
+          break;
+        }
+        if (opts.wsTarget && subNsid && subNsid !== TUNNEL_NSID) {
+          startWsSubscription(
+            msg.subscriptionId as string,
+            subNsid,
+            (msg.params as Record<string, string>) ?? {},
+          );
+          break;
+        }
+        if (opts.synthetic) {
+          const subscriptionId = msg.subscriptionId as string;
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+              $type: `${SUBSCRIBE_NSID}#subscriptionOpen`,
+              subscriptionId,
+            }));
+          }
+          let seq = 0;
+          const interval = setInterval(() => {
+            if (ws.readyState !== WebSocket.OPEN) {
+              clearInterval(interval);
+              syntheticIntervals.delete(interval);
+              return;
+            }
+            ws.send(JSON.stringify({
+              $type: `${SUBSCRIBE_NSID}#subscriptionEvent`,
+              subscriptionId,
+              message: {
+                seq: seq++,
+                time: new Date().toISOString(),
+                event: "synthetic",
+              },
+            }));
+          }, 5000);
+          syntheticIntervals.add(interval);
+        }
+        break;
+      }
+      case "subscriptionData": {
+        const subscriptionId = msg.subscriptionId as string | undefined;
+        if (subscriptionId && typeof msg.data === "string") {
+          tunnelInbound(subscriptionId, decodeBase64(msg.data));
+        }
+        break;
+      }
+      case "subscriptionCancel":
+      case "subscriptionClose": {
+        const subscriptionId = msg.subscriptionId as string | undefined;
+        if (subscriptionId) closeTunnel(subscriptionId);
+        break;
+      }
+    }
+  }
 
-  await registeredPromise;
-  return { subdomain, proxyRef, ws };
+  // One full registration attempt: fetch a fresh single-use nonce, sign it,
+  // open the dispatcher WebSocket, and resolve once `#registered` arrives. On
+  // close after a prior successful registration, schedule a reconnect.
+  function openOnce(): Promise<void> {
+    return (async () => {
+      const nonceToken = await opts.getServiceAuthToken(GET_NONCE_NSID);
+      const nonceRes = await fetch(`${httpOrigin(opts.dispatcherHost)}/xrpc/${GET_NONCE_NSID}`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${nonceToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ key: did, signatures: [] }),
+      });
+      if (!nonceRes.ok) {
+        const err = await nonceRes.text();
+        throw new Error(`nonce request failed: ${nonceRes.status} ${err}`);
+      }
+      const { nonce } = await nonceRes.json() as { nonce: string };
+      const sig = await opts.keypair.sign(decodeBase64(nonce));
+      const registration = JSON.stringify({
+        $type: "com.fedproxy.temp.xrpc.registration",
+        key: did,
+        nonce,
+        signatures: [{ key: did, signature: encodeBase64(sig) }],
+      });
+      const subscribeToken = await opts.getServiceAuthToken(SUBSCRIBE_NSID);
+      const wsUrl = `${wsOrigin(opts.dispatcherHost)}/xrpc/${SUBSCRIBE_NSID}?registration=${
+        encodeURIComponent(registration)
+      }&did=${encodeURIComponent(did)}&service_auth=${encodeURIComponent(subscribeToken)}`;
+
+      ws = new WebSocket(wsUrl);
+
+      await new Promise<void>((resolve, reject) => {
+        let settled = false;
+        const timeout = setTimeout(() => {
+          if (!settled) { settled = true; reject(new Error("registration timeout")); }
+        }, 30_000);
+        ws.onopen = () => {
+          log.info("ws_open", { component: label, host: opts.dispatcherHost });
+        };
+        ws.onmessage = (evt) => {
+          let msg: Record<string, unknown>;
+          try { msg = JSON.parse(evt.data as string) as Record<string, unknown>; } catch { return; }
+          if (msg.$type === `${SUBSCRIBE_NSID}#registered`) {
+            clearTimeout(timeout);
+            everRegistered = true;
+            reconnectAttempts = 0;
+            if (!settled) { settled = true; resolve(); }
+            return;
+          }
+          handleFrame(msg);
+        };
+        ws.onerror = (evt) => {
+          log.error("ws_error", { component: label, error: String(evt) });
+          if (!settled) {
+            settled = true;
+            clearTimeout(timeout);
+            reject(new Error("WebSocket error during registration"));
+          }
+        };
+        ws.onclose = (evt) => {
+          log.info("ws_close", { component: label, code: evt.code, reason: evt.reason });
+          for (const iv of syntheticIntervals) clearInterval(iv);
+          syntheticIntervals.clear();
+          for (const id of [...wsSubs.keys()]) closeTunnel(id);
+          for (const id of [...tunnels.keys()]) closeTunnel(id);
+          if (!settled) {
+            settled = true;
+            clearTimeout(timeout);
+            reject(new Error("closed before registration"));
+          }
+          if (everRegistered) scheduleReconnect();
+        };
+      });
+    })();
+  }
+
+  function scheduleReconnect(): void {
+    if (closed || reconnectTimer) return;
+    const delay = Math.min(1000 * 2 ** reconnectAttempts, 30_000);
+    reconnectAttempts++;
+    log.info("ws_reconnect_scheduled", { component: label, delayMs: delay, attempt: reconnectAttempts });
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null;
+      if (closed) return;
+      openOnce().catch((err) => {
+        log.warn("ws_reconnect_failed", { component: label, error: String(err) });
+        scheduleReconnect();
+      });
+    }, delay);
+  }
+
+  await openOnce();
+  return {
+    subdomain,
+    proxyRef,
+    get ws() { return ws; },
+    close() {
+      closed = true;
+      if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+      try { ws?.close(); } catch { /* already closed */ }
+    },
+  };
 }
 
 export interface TunnelClientOptions {

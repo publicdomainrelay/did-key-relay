@@ -18,12 +18,22 @@ export interface SubscriberOptions {
    * (raw byte stream, e.g. SSH-over-websocket).
    */
   tunnelTarget?: { hostname: string; port: number };
+  /**
+   * When set, inbound relay subscriptions for any non-tunnel NSID open a
+   * WebSocket to this local serve and forward its frames back over the relay
+   * (server-push streaming, e.g. com.atproto.sync.subscribeRepos). Read lazily
+   * so the local serve's bound port can be resolved after it starts listening.
+   */
+  wsTarget?: () => { hostname: string; port: number } | undefined;
 }
 
 export interface SubscriberHandle {
   subdomain: string;
   proxyRef: string;
+  /** Current dispatcher WebSocket. Replaced transparently on reconnect. */
   ws: WebSocket;
+  /** Stop the subscriber: cancel any pending reconnect and close the socket. */
+  close(): void;
 }
 
 export interface CallerOptions {
