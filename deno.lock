@@ -251,6 +251,10 @@
       }
     },
     "links": {
+      "jsr:@publicdomainrelay/app-attest-abc@0.0.0": {},
+      "jsr:@publicdomainrelay/app-attest-common@0.0.0": {},
+      "jsr:@publicdomainrelay/app-attest-darwin@0.0.0": {},
+      "jsr:@publicdomainrelay/app-attest-none@0.0.0": {},
       "jsr:@publicdomainrelay/atproto-attestation-port@0.0.0": {
         "dependencies": [
           "npm:@ipld/dag-cbor@^9.2.0",
@@ -266,6 +270,9 @@
           "npm:@atproto/identity@0.5"
         ]
       },
+      "jsr:@publicdomainrelay/atproto-oauth-abc@0.0.0": {},
+      "jsr:@publicdomainrelay/atproto-oauth-common@0.0.0": {},
+      "jsr:@publicdomainrelay/atproto-oauth-fetch@0.0.0": {},
       "jsr:@publicdomainrelay/atproto-relay-abc@0.0.0": {
         "dependencies": [
           "jsr:@publicdomainrelay/atproto-relay-common@0"
@@ -283,6 +290,9 @@
       "jsr:@publicdomainrelay/atproto-repo-abc@0.0.0": {},
       "jsr:@publicdomainrelay/atproto-repo-common@0.0.0": {},
       "jsr:@publicdomainrelay/atproto-repo-deno@0.0.0": {},
+      "jsr:@publicdomainrelay/badge-blue-keys-abc@0.0.0": {},
+      "jsr:@publicdomainrelay/badge-blue-keys-atproto@0.0.0": {},
+      "jsr:@publicdomainrelay/badge-blue-keys-common@0.0.0": {},
       "jsr:@publicdomainrelay/cli-args-env@0.1.0": {
         "dependencies": [
           "jsr:@cliffy/command@^1.0.0-rc.7"
@@ -493,7 +503,9 @@
         ]
       },
       "jsr:@publicdomainrelay/market-bidder-abc@0.0.0": {},
+      "jsr:@publicdomainrelay/market-bidder-agent@0.0.0": {},
       "jsr:@publicdomainrelay/market-bidder-compute@0.0.0": {},
+      "jsr:@publicdomainrelay/market-bidder-keys@0.0.0": {},
       "jsr:@publicdomainrelay/market-bidder-worker@0.0.0": {},
       "jsr:@publicdomainrelay/market-bidder@0.0.0": {},
       "jsr:@publicdomainrelay/market-common@0.0.0": {},
@@ -581,6 +593,15 @@
         "dependencies": [
           "jsr:@publicdomainrelay/sandbox-abc@0.0.0",
           "jsr:@publicdomainrelay/sandbox-common@0"
+        ]
+      },
+      "jsr:@publicdomainrelay/secret-store-chain@0.0.0": {},
+      "jsr:@publicdomainrelay/secret-store-filesystem@0.0.0": {},
+      "jsr:@publicdomainrelay/secret-store-gnome@0.0.0": {},
+      "jsr:@publicdomainrelay/secret-store-win32@0.0.0": {
+        "dependencies": [
+          "jsr:@publicdomainrelay/app-attest-abc@0",
+          "jsr:@publicdomainrelay/logger@0"
         ]
       },
       "jsr:@publicdomainrelay/serve@0.0.0": {
